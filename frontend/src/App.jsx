@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ShoppingCart, Menu, X, Instagram, Youtube, Heart, Star, Send, Mail, Phone, MapPin, ChevronRight, Sparkles, Palette, Award, Users, ArrowUp, Loader } from 'lucide-react';
 import ClientTestimonialForm from "./components/ClientTestimonialForm"; // top of file
+import SignupPage from "./SignupPage";
+import SigninPage from "./SigninPage";
 
 // API Configuration - UPDATE THIS URL WHEN BACKEND IS READY
 const API_BASE_URL = 'http://localhost:8080/api';
@@ -154,9 +156,27 @@ const mockArtworks = [
 
 
 const mockTestimonials = [
-  { id: 1, name: 'Priya Sharma', rating: 5, text: 'Absolutely breathtaking! Every stroke tells a story. The portrait exceeded my wildest expectations.', approved: true },
-  { id: 2, name: 'Rahul Verma', rating: 5, text: 'Exceptional talent and professionalism. The attention to detail is simply remarkable.', approved: true },
-  { id: 3, name: 'Anita Desai', rating: 5, text: 'A true artist with an incredible gift. The custom piece brought tears to my eyes.', approved: true },
+  { 
+    id: 'mock-1', 
+    name: 'Priya Sharma', 
+    rating: 5, 
+    text: 'Absolutely breathtaking! Every stroke tells a story. The portrait exceeded my wildest expectations.', 
+    approved: true 
+  },
+  { 
+    id: 'mock-2', 
+    name: 'Rahul Verma', 
+    rating: 5, 
+    text: 'Exceptional talent and professionalism. The attention to detail is simply remarkable.', 
+    approved: true 
+  },
+  { 
+    id: 'mock-3', 
+    name: 'Anita Desai', 
+    rating: 5, 
+    text: 'A true artist with an incredible gift. The custom piece brought tears to my eyes.', 
+    approved: true 
+  },
 ];
 
 const ArtistPortfolio = () => {
@@ -168,7 +188,9 @@ const ArtistPortfolio = () => {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [cartOpen, setCartOpen] = useState(false);
-  
+  const [user, setUser] = useState(null);
+  const [currentPage, setCurrentPage] = useState('home');
+
   // API State
   const [artworks, setArtworks] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
@@ -186,8 +208,46 @@ const ArtistPortfolio = () => {
   const [contactSuccess, setContactSuccess] = useState(false);
 
   // Fetch Artworks from API
+  // ✅ Move fetchTestimonials OUTSIDE and BEFORE useEffect
+  // ✅ CORRECT - Outside useEffect (add BEFORE useEffect)
+  const fetchTestimonials = async () => {
+    if (USE_MOCK_DATA) {
+      setTestimonials(mockTestimonials);
+      return;
+    }
+    
+    try {
+      console.log('🔍 Fetching testimonials from API...');
+      const response = await fetch(`${API_BASE_URL}/testimonials`);
+      
+      if (!response.ok) throw new Error('Failed to fetch testimonials');
+      
+      const apiTestimonials = await response.json();
+      console.log('✅ API Testimonials loaded:', apiTestimonials.length);
+      
+      // ✅ Ensure API testimonials have proper IDs
+      const apiWithPrefix = apiTestimonials.map(testimonial => ({
+        ...testimonial,
+        id: testimonial.id ? `api-${testimonial.id}` : `api-${Math.random()}`
+      }));
+      
+      // ✅ Combine with unique keys
+      const combinedTestimonials = [
+        ...mockTestimonials,  // Already have 'mock-1', 'mock-2', 'mock-3'
+        ...apiWithPrefix      // Now have 'api-1', 'api-2', 'api-3', 'api-4'
+      ];
+      
+      console.log('📊 Total testimonials:', combinedTestimonials.length);
+      
+      setTestimonials(combinedTestimonials);
+    } catch (err) {
+      console.error('❌ Error fetching API testimonials:', err);
+      setTestimonials(mockTestimonials);
+    }
+  };
+
   useEffect(() => {
-    const fetchArtworks = async () => {
+    const fetchAllData = async () => {
       if (USE_MOCK_DATA) {
         setArtworks(mockArtworks);
         setTestimonials(mockTestimonials);
@@ -197,37 +257,33 @@ const ArtistPortfolio = () => {
 
       try {
         setLoading(true);
-        const response = await fetch(`${API_BASE_URL}/artworks`);
-        if (!response.ok) throw new Error('Failed to fetch artworks');
-        const data = await response.json();
-        setArtworks(data);
+
+        // ✅ Fetch artworks and combine with mock
+        const artworksResponse = await fetch(`${API_BASE_URL}/artworks`);
+        if (artworksResponse.ok) {
+          const artworksData = await artworksResponse.json();
+          setArtworks([...mockArtworks, ...artworksData]); // merge mock + real
+        } else {
+          setArtworks(mockArtworks);
+        }
+
+        // ✅ Fetch testimonials (already merges mock + API inside fetchTestimonials)
+        await fetchTestimonials();
+
         setError(null);
       } catch (err) {
-        console.error('Error fetching artworks:', err);
+        console.error('❌ Error fetching data:', err);
         setError(err.message);
-        setArtworks(mockArtworks); // Fallback to mock data
+        setArtworks(mockArtworks);
+        setTestimonials(mockTestimonials);
       } finally {
         setLoading(false);
       }
     };
 
-    const fetchTestimonials = async () => {
-      if (USE_MOCK_DATA) return;
-      
-      try {
-        const response = await fetch(`${API_BASE_URL}/testimonials`);
-        if (!response.ok) throw new Error('Failed to fetch testimonials');
-        const data = await response.json();
-        setTestimonials(data);
-      } catch (err) {
-        console.error('Error fetching testimonials:', err);
-        setTestimonials(mockTestimonials); // Fallback to mock data
-      }
-    };
-
-    fetchArtworks();
-    fetchTestimonials();
+    fetchAllData();
   }, []);
+
 
   // Handle Contact Form Submit
   const handleContactSubmit = async (e) => {
@@ -345,9 +401,16 @@ const ArtistPortfolio = () => {
     setCart(cart.filter(item => item.id !== id));
   };
 
-  const filteredArtworks = selectedCategory === 'all' 
-    ? artworks 
-    : artworks.filter(art => art.category === selectedCategory);
+  const filteredArtworks = useMemo(() => {
+    if (selectedCategory === 'all') return artworks;
+    
+    return artworks.filter(art => {
+      if (Array.isArray(art.category)) {
+        return art.category.includes(selectedCategory);
+      }
+      return art.category === selectedCategory;
+    });
+  }, [artworks, selectedCategory]);
 
   const scrollToSection = (section) => {
     setActiveSection(section);
@@ -461,58 +524,97 @@ const ArtistPortfolio = () => {
         )}
       </nav>
 
-      {/* Cart Sidebar */}
-      {cartOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setCartOpen(false)}
-          />
-          <div className="relative w-full max-w-md bg-gradient-to-b from-gray-900 to-black border-l border-white/10 p-6 overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-bold">Your Cart</h3>
-              <button onClick={() => setCartOpen(false)}>
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            {cart.length === 0 ? (
-              <p className="text-gray-400 text-center py-8">Your cart is empty</p>
-            ) : (
-              <>
-                <div className="space-y-4 mb-6">
-                  {cart.map((item, idx) => (
-                    <div key={idx} className="flex gap-4 bg-white/5 rounded-lg p-4">
-                      <img src={item.imageUrl} alt={item.title} className="w-20 h-20 object-cover rounded" />
-                      <div className="flex-1">
-                        <h4 className="font-semibold">{item.title}</h4>
-                        <p className="text-purple-400">₹{item.price}</p>
-                      </div>
-                      <button 
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-white/10 pt-4">
-                  <div className="flex justify-between mb-4">
-                    <span className="text-lg">Total:</span>
-                    <span className="text-2xl font-bold text-purple-400">₹{totalCartValue}</span>
-                  </div>
-                  <button 
-                    onClick={handleCheckout}
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-semibold hover:shadow-lg hover:shadow-purple-500/50 transition-all duration-300"
-                  >
-                    Proceed to Checkout
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+	  {/* Cart Sidebar - Fixed Version */}
+	  {cartOpen && (
+	    <div className="fixed inset-0 z-50 flex justify-end">
+	      <div
+	        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+	        onClick={() => setCartOpen(false)}
+	      />
+	      <div className="relative w-full max-w-md bg-gradient-to-b from-gray-900 to-black border-l border-white/10 p-6 overflow-y-auto">
+	        <div className="flex justify-between items-center mb-6">
+	          <h3 className="text-2xl font-bold">Your Cart</h3>
+	          <button 
+	            onClick={() => setCartOpen(false)}
+	            className="hover:bg-white/10 p-2 rounded-lg transition"
+	            aria-label="Close cart"
+	          >
+	            <X className="w-6 h-6" />
+	          </button>
+	        </div>
+
+	        {cart.length === 0 ? (
+	          <div className="text-center py-12">
+	            <ShoppingCart className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+	            <p className="text-gray-400 text-lg">Your cart is empty</p>
+	            <p className="text-gray-500 text-sm mt-2">Add some amazing artworks!</p>
+	          </div>
+	        ) : (
+	          <>
+	            <div className="space-y-4 mb-6">
+	              {cart.map((item, idx) => (
+	                <div 
+	                  key={`cart-${item.id}-${idx}`} // ✅ Fixed: Combined id + index for uniqueness
+	                  className="flex gap-4 bg-white/5 rounded-lg p-4 hover:bg-white/10 transition"
+	                >
+	                  <img 
+	                    src={item.imageUrl} 
+	                    alt={item.title} 
+	                    className="w-20 h-20 object-cover rounded"
+	                    loading="lazy"
+	                  />
+	                  <div className="flex-1">
+	                    <h4 className="font-semibold">{item.title}</h4>
+	                    <p className="text-purple-400 font-medium">₹{item.price.toLocaleString()}</p>
+	                  </div>
+	                  <button
+	                    onClick={() => removeFromCart(item.id)}
+	                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-2 rounded-lg transition"
+	                    aria-label={`Remove ${item.title} from cart`}
+	                  >
+	                    <X className="w-5 h-5" />
+	                  </button>
+	                </div>
+	              ))}
+	            </div>
+
+	            <div className="border-t border-white/10 pt-4 space-y-4">
+	              {/* Cart Summary */}
+	              <div className="space-y-2">
+	                <div className="flex justify-between text-gray-400">
+	                  <span>Items:</span>
+	                  <span>{cart.length}</span>
+	                </div>
+	                <div className="flex justify-between items-baseline">
+	                  <span className="text-lg font-medium">Total:</span>
+	                  <span className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+	                    ₹{totalCartValue.toLocaleString()}
+	                  </span>
+	                </div>
+	              </div>
+
+	              {/* Checkout Button */}
+	              <button
+	                onClick={handleCheckout}
+	                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 rounded-lg font-semibold hover:shadow-lg hover:shadow-purple-500/50 transition-all duration-300 transform hover:scale-105"
+	              >
+	                Proceed to Checkout
+	              </button>
+
+	              {/* Continue Shopping */}
+	              <button
+	                onClick={() => setCartOpen(false)}
+	                className="w-full bg-white/5 text-white py-3 rounded-lg font-medium hover:bg-white/10 transition"
+	              >
+	                Continue Shopping
+	              </button>
+	            </div>
+	          </>
+	        )}
+	      </div>
+	    </div>
+	  )}
+
 
       {/* Hero Section */}
       <section id="home" className="relative min-h-screen flex items-center pt-20 z-10">
@@ -651,67 +753,85 @@ const ArtistPortfolio = () => {
         </div>
       </section>
 
-      {/* Shop Section */}
-      <section id="shop" className="relative py-20 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-5xl md:text-6xl font-bold mb-4">
-              <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Exclusive Collection
-              </span>
-            </h2>
-            <p className="text-gray-400 text-lg">Own a piece of timeless artistry</p>
-          </div>
+	  {/* Shop Section */}
+	  <section id="shop" className="relative py-20 z-10">
+	    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+	      {/* Header */}
+	      <div className="text-center mb-16">
+	        <h2 className="text-5xl md:text-6xl font-bold mb-4">
+	          <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+	            Exclusive Collection
+	          </span>
+	        </h2>
+	        <p className="text-gray-400 text-lg">Own a piece of timeless artistry</p>
+	      </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {artworks.slice(0, 6).map(art => (
-              <div key={art.id} className="group bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl overflow-hidden hover:border-purple-400/50 transition-all duration-500 hover:shadow-2xl hover:shadow-purple-500/20">
-                <div className="relative overflow-hidden">
-                  <img 
-                    src={art.imageUrl} 
-                    alt={art.title} 
-                    className="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-700"
-                  />
-                  <button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:bg-white/20 transition-all duration-300">
-                    <Heart className="w-5 h-5 text-white hover:fill-pink-400 hover:text-pink-400 transition-all" />
-                  </button>
-                  <div className="absolute bottom-4 left-4 flex gap-1">
-                    {[...Array(art.rating)].map((_, i) => (
-                      <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                    ))}
-                  </div>
-                </div>
-                <div className="p-6">
-                  <h3 className="text-2xl font-bold mb-2">{art.title}</h3>
-                  <p className="text-gray-400 mb-4">{art.description}</p>
-                  <div className="flex justify-between items-center">
-                    <span className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                      ₹{art.price}
-                    </span>
-                    <button 
-                      onClick={() => addToCart(art)}
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-full font-semibold hover:shadow-lg hover:shadow-purple-500/50 transition-all duration-300 transform hover:scale-105"
-                    >
-                      Add to Cart
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+	      {/* Grid of Artworks */}
+	      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+	        {artworks.slice(0, 6).map((art) => (
+	          <div
+	            key={art.id}
+	            className="group bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl overflow-hidden hover:border-purple-400/50 transition-all duration-500 hover:shadow-2xl hover:shadow-purple-500/20"
+	          >
+	            {/* Image + Favorite */}
+	            <div className="relative overflow-hidden">
+	              <img
+	                src={art.imageUrl}
+	                alt={art.title}
+	                className="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-700"
+	              />
+	              <button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:bg-white/20 transition-all duration-300">
+	                <Heart className="w-5 h-5 text-white hover:fill-pink-400 hover:text-pink-400 transition-all" />
+	              </button>
+	              <div className="absolute bottom-4 left-4 flex gap-1">
+	                {[...Array(art.rating)].map((_, i) => (
+	                  <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+	                ))}
+	              </div>
+	            </div>
 
-          <div className="mt-16 text-center">
-            <div className="inline-flex items-center gap-6 bg-white/5 backdrop-blur-sm border border-white/10 px-8 py-4 rounded-full">
-              <span className="text-gray-300 font-semibold">Secure Payments:</span>
-              <div className="flex gap-4 text-sm font-bold">
-                <span className="text-blue-400">Razorpay</span>
-                <span className="text-blue-400">PayPal</span>
-                <span className="text-purple-400">Stripe</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+	            {/* Details */}
+	            <div className="p-6">
+	              <h3 className="text-2xl font-bold mb-2">{art.title}</h3>
+	              <p className="text-gray-400 mb-4">{art.description}</p>
+	              <div className="flex justify-between items-center">
+	                <span className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+	                  ₹{art.price}
+	                </span>
+
+	                {/* Add to Cart / Buy */}
+	                <button
+	                  onClick={() => {
+	                    if (!user) {
+	                      setCurrentPage("/SigninPage");  // ✅ show signin page instead of navigate
+	                    } else {
+	                      addToCart(art);
+	                    }
+	                  }}
+	                  className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-full font-semibold hover:shadow-lg hover:shadow-purple-500/50 transition-all duration-300 transform hover:scale-105"
+	                >
+	                  {user ? "Add to Cart" : "Sign in to Buy"}
+	                </button>
+	              </div>
+	            </div>
+	          </div>
+	        ))}
+	      </div>
+
+	      {/* Payment Badges */}
+	      <div className="mt-16 text-center">
+	        <div className="inline-flex items-center gap-6 bg-white/5 backdrop-blur-sm border border-white/10 px-8 py-4 rounded-full">
+	          <span className="text-gray-300 font-semibold">Secure Payments:</span>
+	          <div className="flex gap-4 text-sm font-bold">
+	            <span className="text-blue-400">Razorpay</span>
+	            <span className="text-blue-400">PayPal</span>
+	            <span className="text-purple-400">Stripe</span>
+	          </div>
+	        </div>
+	      </div>
+	    </div>
+	  </section>
+
 	  
 
       {/* About Section */}
@@ -753,10 +873,15 @@ const ArtistPortfolio = () => {
         </div>
       </section>
 
-      {/* Testimonials */}
-	  {/* Testimonials Section - KEEP YOUR EXISTING CODE */}
+    
+	  {/* Testimonials Section */}
+	  
+
+	  {/* Testimonials Section */}
 	  <section id="testimonials" className="relative py-20 z-10">
 	    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+	      
+	      {/* Header */}
 	      <div className="text-center mb-16">
 	        <h2 className="text-5xl md:text-6xl font-bold mb-4">
 	          <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
@@ -766,23 +891,80 @@ const ArtistPortfolio = () => {
 	        <p className="text-gray-400 text-lg">Testimonials from art enthusiasts worldwide</p>
 	      </div>
 
-	      {/* YOUR EXISTING TESTIMONIALS GRID - KEEP IT */}
-	      <div className="grid md:grid-cols-3 gap-8">
-	        {testimonials.map((testimonial) => (
-	          <div key={testimonial.id} className="bg-white/5 backdrop-blur-sm border border-white/10 p-8 rounded-3xl hover:border-purple-400/50 transition-all duration-500 hover:transform hover:scale-105">
-	            {/* Your existing testimonial card design */}
-	          </div>
-	        ))}
+	      {/* Simple counter */}
+	      <div className="text-center mb-8">
+	        <div className="inline-flex items-center gap-3 bg-white/5 backdrop-blur-sm border border-white/10 px-6 py-3 rounded-full">
+	          <span className="text-green-300 text-sm font-medium">
+	            ✓ {testimonials.length} verified testimonial{testimonials.length !== 1 ? 's' : ''}
+	          </span>
+	        </div>
 	      </div>
 
-	      {/* ADD JUST THIS COMPONENT - It shows button and handles modal */}
-	      <ClientTestimonialForm onSuccess={() => {
-	        // Optionally refresh testimonials after submission
-	        fetchTestimonials();
-	      }} />
+	      {/* Testimonials Grid */}
+	      {testimonials && testimonials.length > 0 ? (
+	        <div className="grid md:grid-cols-3 gap-8">
+	          {testimonials
+	            .filter(t => t.text || t.testimonial) // ✅ Only show testimonials with content
+	            .map((testimonial, index) => (
+	              <div 
+	                key={testimonial.id || `testimonial-${index}`} 
+	                className="bg-white/5 backdrop-blur-sm border border-white/10 p-8 rounded-3xl hover:border-purple-400/50 transition-all duration-500 hover:transform hover:scale-105 relative"
+	              >
+	                {/* Verified badge */}
+	                <div className="absolute top-4 right-4 bg-green-500/20 text-green-300 text-xs px-3 py-1 rounded-full border border-green-500/30 font-medium">
+	                  ✓ Verified
+	                </div>
 
+	                {/* Star Rating */}
+	                <div className="flex gap-1 mb-4">
+	                  {[...Array(testimonial.rating || 5)].map((_, i) => (
+	                    <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
+	                  ))}
+	                </div>
+	                
+	                {/* Testimonial Text */}
+	                <p className="text-gray-300 mb-6 italic min-h-[100px] leading-relaxed">
+	                  "{testimonial.text || testimonial.testimonial || 'Great experience!'}"
+	                </p>
+	                
+	                {/* Author Info */}
+	                <div className="border-t border-white/10 pt-4">
+	                  <p className="font-semibold text-purple-400 text-lg">
+	                    {testimonial.name || 'Anonymous'}
+	                  </p>
+	                  {testimonial.email && (
+	                    <p className="text-xs text-gray-500 mt-1 truncate">
+	                      {testimonial.email}
+	                    </p>
+	                  )}
+	                  {testimonial.createdAt && (
+	                    <p className="text-xs text-gray-500 mt-1">
+	                      {new Date(testimonial.createdAt).toLocaleDateString('en-US', {
+	                        year: 'numeric',
+	                        month: 'long',
+	                        day: 'numeric'
+	                      })}
+	                    </p>
+	                  )}
+	                </div>
+	              </div>
+	            ))}
+	        </div>
+	      ) : (
+	        <div className="text-center py-16">
+	          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-12 max-w-2xl mx-auto">
+	            <Star className="w-16 h-16 text-purple-400/50 mx-auto mb-4" />
+	            <p className="text-gray-400 text-lg mb-2">No testimonials yet.</p>
+	            <p className="text-gray-500 text-sm">Be the first to share your experience!</p>
+	          </div>
+	        </div>
+	      )}
+
+	      {/* Testimonial Form */}
+	      <ClientTestimonialForm onSuccess={fetchTestimonials} />
 	    </div>
 	  </section>
+
 
       {/* Contact Section */}
       <section id="contact" className="relative py-20 z-10">
