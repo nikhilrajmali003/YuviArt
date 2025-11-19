@@ -18,7 +18,8 @@ public class CorsGlobalConfig implements WebMvcConfigurer {
                     "http://localhost:5173",  // Vite default port
                     "http://localhost:5174",  // Vite alternate port
                     "http://localhost:5175",  // Vite alternate port
-                    "http://localhost:3000"   // Create React App port (optional)
+                    "http://localhost:3000",  // Create React App port (optional)
+                    "https://artgallery-hazel.vercel.app/"
                 )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                 .allowedHeaders("*")
